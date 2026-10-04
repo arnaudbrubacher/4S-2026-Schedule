@@ -104,6 +104,9 @@ tr.flash{animation:flash 1.4s ease-out}
 @keyframes flash{from{background:var(--fav-bg)}to{background:transparent}}
 .tag{font-weight:700;margin-right:4px}
 .empty{padding:40px 0;color:var(--muted)}
+.dayhead{font-size:20px;font-weight:800;margin:22px 0 0;padding:8px 0;border-bottom:2px solid var(--ink);display:flex;gap:10px;align-items:baseline;scroll-margin-top:calc(var(--barh,150px) + 8px)}
+.dayhead span{font-size:13px;font-weight:500;color:var(--muted)}
+.tabs button:disabled{opacity:.4;cursor:default}
 
 /* calendar panel */
 .panel{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--paper);border-left:1px solid var(--rule)}
@@ -161,7 +164,7 @@ td.title .why{display:none}
   <div class="bar">
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="controls">
-      <input type="search" id="q" placeholder="Search titles, people, universities, rooms" aria-label="Search sessions">
+      <input type="search" id="q" placeholder="Search all days: titles, people, universities, rooms" aria-label="Search sessions">
       <div class="seg" role="group" aria-label="Filter">
         <button data-f="all" aria-pressed="true">All</button>
         <button data-f="fav" aria-pressed="false">My picks</button>
@@ -233,36 +236,59 @@ function detailsHTML(r){
 function persist(){try{localStorage.setItem("4s-favs",JSON.stringify([...favs]));localStorage.setItem("4s-view",JSON.stringify({day:state.day}))}catch(e){}}
 function toggle(n){favs.has(n)?favs.delete(n):favs.add(n);persist();render();renderCal();}
 
-function tabs(){
+let QCOLL=new Set(), lastQ="";
+const searching=()=>state.q.trim().length>0;
+const collSet=()=>searching()?QCOLL:COLL;
+function matches(){const q=state.q.trim().toLowerCase();let r=DATA.filter(x=>x._s.includes(q));if(state.f==="fav")r=r.filter(x=>favs.has(x.id));return r;}
+function tabs(hits){
   const el=document.getElementById("tabs");
-  el.innerHTML=DAYS.map(d=>{const f=DATA.filter(x=>x.day===d&&favs.has(x.id)).length;
+  el.innerHTML=DAYS.map(d=>{
+    if(hits){const h=hits.filter(x=>x.day===d).length;
+      return `<button role="tab" aria-selected="false" data-d="${d}"${h?"":" disabled"}>${d.slice(0,3)} ${DATES[d]}<small>${h} match${h===1?"":"es"}</small></button>`;}
+    const f=DATA.filter(x=>x.day===d&&favs.has(x.id)).length;
     return `<button role="tab" aria-selected="${d===state.day}" data-d="${d}">${d.slice(0,3)} ${DATES[d]}${f?`<small>☆${f}</small>`:""}</button>`}).join("");
-  el.querySelectorAll("button").forEach(b=>b.onclick=()=>{state.day=b.dataset.d;persist();render();window.scrollTo({top:0})});
+  el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    if(searching()){const h=document.getElementById("day-"+b.dataset.d);if(h)h.scrollIntoView({block:"start"});return;}
+    state.day=b.dataset.d;persist();render();window.scrollTo({top:0})});
 }
-function render(){
-  tabs();
-  document.querySelectorAll(".seg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===state.f));
-  const q=state.q.trim().toLowerCase();
-  let rows=DATA.filter(x=>x.day===state.day);
-  if(state.f==="fav") rows=rows.filter(x=>favs.has(x.id));
-  if(q) rows=rows.filter(x=>x._s.includes(q));
-  document.getElementById("count").textContent=`${rows.length} on ${state.day}`;
-  const groups=[],idx={};
-  rows.forEach(r=>{if(!(r.time in idx)){idx[r.time]=groups.length;groups.push({time:r.time,sort:r.sort,end:r.end,rows:[]})}groups[idx[r.time]].rows.push(r)});
-  groups.sort((a,b)=>a.sort-b.sort||a.end-b.end);
-  const main=document.getElementById("main");
-  if(!groups.length){main.innerHTML=`<p class="empty">${state.f==="fav"?"No favorites on this day yet. Switch to All and tick ☆ next to a session.":"No sessions match. Clear the search or switch the filter to All."}</p>`;return;}
-  main.innerHTML=groups.map(g=>{
-    const mine=g.rows.filter(r=>favs.has(r.id)).length;
-    const sk=state.day+"|"+g.time, shut=COLL.has(sk);
-    return `<section class="slot${shut?" shut":""}"><button class="slot-time" type="button" data-k="${esc(sk)}" aria-expanded="${!shut}"><span class="st"><u class="loc">${fmt(g.sort).replace(/[ap]$/,"")}</u><i class="chev" aria-hidden="true"></i></span><span>to <u class="loc">${fmt(g.end)}m</u></span><em>${g.rows.length} session${g.rows.length===1?"":"s"}${mine?`, ★${mine} picked`:""}</em><span class="vh">${shut?"Show sessions":"Hide sessions"}</span></button>
+function slotHTML(g,day){
+  const C=collSet();
+  const mine=g.rows.filter(r=>favs.has(r.id)).length;
+  const sk=day+"|"+g.time, shut=C.has(sk);
+  return `<section class="slot${shut?" shut":""}"><button class="slot-time" type="button" data-k="${esc(sk)}" aria-expanded="${!shut}"><span class="st"><u class="loc">${fmt(g.sort).replace(/[ap]$/,"")}</u><i class="chev" aria-hidden="true"></i></span><span>to <u class="loc">${fmt(g.end)}m</u></span><em>${g.rows.length} session${g.rows.length===1?"":"s"}${mine?`, ★${mine} picked`:""}</em><span class="vh">${shut?"Show sessions":"Hide sessions"}</span></button>
     <div class="slotbody" style="overflow-x:auto"${shut?" hidden":""}><table><tbody>
     ${g.rows.map(r=>{const f=favs.has(r.id);return `<tr id="s${r.id}" class="${f?"isfav":""}"><td class="fav"><button class="star" data-n="${r.id}" aria-pressed="${f}" aria-label="${f?"Remove from":"Add to"} favorites: ${esc(r.title)}">${f?"★":"☆"}</button></td>
       <td class="title"><details${OPEN.has(r.id)?" open":""} data-id="${r.id}"><summary><span class="ttl">${esc(r.title)}</span><span class="meta">${metaHTML(r)}</span></summary>${detailsHTML(r)}</details></td></tr>`}).join("")}
-    </tbody></table></div></section>`}).join("");
+    </tbody></table></div></section>`;
+}
+function groupSlots(rows){
+  const groups=[],idx={};
+  rows.forEach(r=>{if(!(r.time in idx)){idx[r.time]=groups.length;groups.push({time:r.time,sort:r.sort,end:r.end,rows:[]})}groups[idx[r.time]].rows.push(r)});
+  return groups.sort((a,b)=>a.sort-b.sort||a.end-b.end);
+}
+function render(){
+  const q=state.q.trim().toLowerCase();
+  if(q!==lastQ){QCOLL=new Set();lastQ=q;}
+  document.querySelectorAll(".seg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===state.f));
+  const main=document.getElementById("main");
+  if(q){
+    const hits=matches(); tabs(hits);
+    const days=DAYS.filter(d=>hits.some(x=>x.day===d));
+    document.getElementById("count").textContent=`${hits.length} match${hits.length===1?"":"es"} across all days`;
+    main.innerHTML=hits.length?days.map(d=>{const rs=hits.filter(x=>x.day===d);
+      return `<h2 class="dayhead" id="day-${d}">${d}, Oct ${DATES[d]}<span>${rs.length} match${rs.length===1?"":"es"}</span></h2>`+groupSlots(rs).map(g=>slotHTML(g,d)).join("")}).join("")
+      :`<p class="empty">No sessions match "${esc(state.q.trim())}" on any day${state.f==="fav"?" among your picks":""}.</p>`;
+  } else {
+    tabs(null);
+    let rows=DATA.filter(x=>x.day===state.day);
+    if(state.f==="fav") rows=rows.filter(x=>favs.has(x.id));
+    document.getElementById("count").textContent=`${rows.length} on ${state.day}`;
+    const groups=groupSlots(rows);
+    main.innerHTML=groups.length?groups.map(g=>slotHTML(g,state.day)).join(""):`<p class="empty">${state.f==="fav"?"No favorites on this day yet. Switch to All and tick ☆ next to a session.":"No sessions on this day."}</p>`;
+  }
   syncExp&&setTimeout(syncExp);
   main.querySelectorAll(".star").forEach(b=>b.onclick=()=>toggle(b.dataset.n));
-  main.querySelectorAll(".slot-time").forEach(b=>b.onclick=()=>{const k=b.dataset.k;COLL.has(k)?COLL.delete(k):COLL.add(k);saveColl();render()});
+  main.querySelectorAll(".slot-time").forEach(b=>b.onclick=()=>{const k=b.dataset.k,C=collSet();C.has(k)?C.delete(k):C.add(k);if(!searching())saveColl();render()});
   syncSlots();
   main.querySelectorAll("details").forEach(d=>d.addEventListener("toggle",()=>{d.open?OPEN.add(d.dataset.id):OPEN.delete(d.dataset.id)}));
 }
@@ -331,8 +357,8 @@ document.getElementById("closecal").onclick=()=>document.body.classList.remove("
 document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{state.f=b.dataset.f;render()});
 document.getElementById("expall").onclick=()=>{const ds=[...document.querySelectorAll("#main details")];const open=!ds.every(d=>d.open);ds.forEach(d=>{d.open=open;open?OPEN.add(d.dataset.id):OPEN.delete(d.dataset.id)});syncExp()};
 function syncExp(){const ds=[...document.querySelectorAll("#main details")];document.getElementById("expall").textContent=ds.length&&ds.every(d=>d.open)?"Collapse all sessions":"Expand all sessions"}
-function syncSlots(){const ks=[...document.querySelectorAll("#main .slot-time")].map(b=>b.dataset.k);document.getElementById("slotall").textContent=ks.length&&ks.every(k=>COLL.has(k))?"Expand time slots":"Collapse time slots"}
-document.getElementById("slotall").onclick=()=>{const ks=[...document.querySelectorAll("#main .slot-time")].map(b=>b.dataset.k);const shut=!ks.every(k=>COLL.has(k));ks.forEach(k=>shut?COLL.add(k):COLL.delete(k));saveColl();render()};
+function syncSlots(){const ks=[...document.querySelectorAll("#main .slot-time")].map(b=>b.dataset.k);document.getElementById("slotall").textContent=ks.length&&ks.every(k=>collSet().has(k))?"Expand time slots":"Collapse time slots"}
+document.getElementById("slotall").onclick=()=>{const ks=[...document.querySelectorAll("#main .slot-time")].map(b=>b.dataset.k);const C=collSet();const shut=!ks.every(k=>C.has(k));ks.forEach(k=>shut?C.add(k):C.delete(k));if(!searching())saveColl();render()};
 document.getElementById("theme").onclick=()=>{const cur=document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");const nt=cur==="dark"?"light":"dark";document.documentElement.dataset.theme=nt;try{localStorage.setItem("4s-theme",nt)}catch(e){}syncTheme()};
 function syncTheme(){const cur=document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");const b=document.getElementById("theme");b.textContent=cur==="dark"?"Light mode":"Dark mode";b.setAttribute("aria-label","Switch to "+(cur==="dark"?"light":"dark")+" mode")}
 syncTheme();
