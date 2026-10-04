@@ -35,7 +35,7 @@ button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--hi);outline-offset:2px}
 
 .slot{display:grid;grid-template-columns:96px 1fr;gap:0 14px;padding:16px 0;border-bottom:1px solid var(--rule)}
-.slot-time{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left;cursor:pointer;font-weight:800;font-size:28px;line-height:1;position:sticky;top:112px;align-self:start}
+.slot-time{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left;cursor:pointer;font-weight:800;font-size:28px;line-height:1;position:sticky;top:calc(var(--barh,150px) + 12px);align-self:start}
 .slot-time span.st{display:flex;align-items:center;gap:8px;font-size:inherit;font-weight:inherit;color:inherit;margin:0}
 .chev{display:inline-block;width:9px;height:9px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(-135deg);margin-top:6px;transition:transform .15s}
 .slot.shut .chev{transform:rotate(45deg);margin-top:-4px}
@@ -56,7 +56,13 @@ button{font:inherit;color:inherit}
 .slot.shut{padding:10px 0}
 .slot.shut .slot-time{position:static}
 .titlerow{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
-.titlerow .pbtn{margin-top:4px;white-space:nowrap}
+.titlerow .pbtn{white-space:nowrap}
+.hdr-actions{display:flex;gap:8px;align-items:center;margin-top:4px;flex-shrink:0}
+.tip{position:static}
+.hdr-actions{position:relative}
+.infobtn{width:32px;height:32px;padding:0;border-radius:50%;font-weight:800;font-style:italic;font-family:Georgia,"Times New Roman",serif;font-size:16px;line-height:1}
+.tipbox{position:absolute;right:0;top:calc(100% + 8px);z-index:30;width:min(380px,calc(100vw - 32px));background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;font-size:13.5px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.18);display:none}
+.tip:hover .tipbox,.tip.open .tipbox,.infobtn:focus-visible+.tipbox{display:block}
 .slot-time span{display:block;font-size:14px;font-weight:600;color:var(--muted);margin-top:4px}
 .slot-time em{display:block;font-style:normal;font-size:12.5px;font-weight:500;color:var(--muted);margin-top:6px}
 table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--rule)}
@@ -149,8 +155,8 @@ td.title .why{display:none}
 <div class="layout">
 <div class="list">
   <header class="top">
-    <div class="titlerow"><h1>4S 2026 Toronto, schedule and favorites</h1><button class="pbtn" id="theme" type="button">Dark mode</button></div>
-    <p class="sub">Tick ☆ to add a session to your calendar. Favorites are saved in this browser only, so keep using the same browser or back them up. All entries from the Oct 1 program PDF. Click a session title for its papers, chairs and organizers. Page numbers read p.140(147): the page printed in the program, then the page in a PDF viewer.</p>
+    <div class="titlerow"><h1>4S 2026 Toronto, schedule and favorites</h1><div class="hdr-actions"><div class="tip"><button class="pbtn infobtn" id="info" type="button" aria-expanded="false" aria-controls="infotip" aria-label="How this page works">i</button><div class="tipbox" id="infotip" role="tooltip">Tick ☆ to add a session to your calendar. Favorites are saved in this browser only, so keep using the same browser or back them up. All entries from the Oct 1 program PDF. Click a session title for its papers, chairs and organizers. Page numbers read p.140(147): the page printed in the program, then the page in a PDF viewer.</div></div><button class="pbtn" id="theme" type="button">Dark mode</button></div></div>
+
   </header>
   <div class="bar">
     <div class="tabs" role="tablist" id="tabs"></div>
@@ -330,8 +336,14 @@ document.getElementById("slotall").onclick=()=>{const ks=[...document.querySelec
 document.getElementById("theme").onclick=()=>{const cur=document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");const nt=cur==="dark"?"light":"dark";document.documentElement.dataset.theme=nt;try{localStorage.setItem("4s-theme",nt)}catch(e){}syncTheme()};
 function syncTheme(){const cur=document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");const b=document.getElementById("theme");b.textContent=cur==="dark"?"Light mode":"Dark mode";b.setAttribute("aria-label","Switch to "+(cur==="dark"?"light":"dark")+" mode")}
 syncTheme();
+(function(){const t=document.querySelector(".tip"),b=document.getElementById("info");
+  const set=o=>{t.classList.toggle("open",o);b.setAttribute("aria-expanded",o)};
+  b.onclick=e=>{e.stopPropagation();set(!t.classList.contains("open"))};
+  document.addEventListener("click",e=>{if(!t.contains(e.target))set(false)});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")set(false)});})();
 document.getElementById("main").addEventListener("toggle",syncExp,true);
 document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;render()});
+(function(){const bar=document.querySelector(".bar");const set=()=>document.documentElement.style.setProperty("--barh",bar.offsetHeight+"px");set();if(window.ResizeObserver)new ResizeObserver(set).observe(bar);else addEventListener("resize",set);})();
 render();renderCal();
 </script>
 </body>
